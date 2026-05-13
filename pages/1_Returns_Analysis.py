@@ -9,6 +9,59 @@ st.set_page_config(page_title="Returns Analysis", page_icon="📦", layout="wide
 st.title("📦 Returns Analysis")
 st.markdown("---")
 
+# ── 0. Template download ───────────────────────────────────────────────────────
+def build_template() -> bytes:
+    wb_t = Workbook()
+    ws_t = wb_t.active
+    ws_t.title = 'ALL'
+    headers = [
+        'return-date', 'asin', 'product-name', 'quantity',
+        'reason', 'customer-comments',
+    ]
+    ws_t.append(headers)
+    hdr_fill = PatternFill('solid', fgColor='1F3864')
+    hdr_font = Font(name='Calibri', bold=True, color='FFFFFF', size=10)
+    thin = Side(style='thin', color='CCCCCC')
+    brd  = Border(left=thin, right=thin, top=thin, bottom=thin)
+    for col_idx, _ in enumerate(headers, 1):
+        cell = ws_t.cell(1, col_idx)
+        cell.fill      = hdr_fill
+        cell.font      = hdr_font
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+        cell.border    = brd
+    col_widths = [18, 14, 50, 8, 30, 60]
+    for i, w in enumerate(col_widths, 1):
+        ws_t.column_dimensions[get_column_letter(i)].width = w
+    ws_t.row_dimensions[1].height = 18
+    # example row
+    ws_t.append([
+        '2024-01-15', 'B0XXXXXXXXX', 'Example Product Name', 1,
+        'DEFECTIVE', 'The item stopped working after two days.',
+    ])
+    buf = io.BytesIO()
+    wb_t.save(buf)
+    buf.seek(0)
+    return buf.read()
+
+with st.expander("Шаблон файлу (.xlsx)", expanded=False):
+    st.markdown(
+        "Файл повинен містити аркуш **`ALL`** з колонками нижче. "
+        "Поля **`return-date`** та **`quantity`** — необов'язкові."
+    )
+    st.table(pd.DataFrame({
+        'Колонка':        ['return-date', 'asin', 'product-name', 'quantity', 'reason', 'customer-comments'],
+        'Обов\'язкова':   ['Ні', 'Так', 'Так', 'Ні', 'Так', 'Так'],
+        'Приклад':        ['2024-01-15', 'B0XXXXXXXXX', 'Example Product', '1', 'DEFECTIVE', 'Stopped working'],
+    }))
+    st.download_button(
+        label="Завантажити шаблон",
+        data=build_template(),
+        file_name="returns_template.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+st.markdown("---")
+
 # ── 1. File upload ────────────────────────────────────────────────────────────
 uploaded = st.file_uploader("Завантажте файл з поверненнями (.xlsx)", type=["xlsx"])
 
@@ -26,7 +79,7 @@ except Exception as e:
 # Normalize column names: strip whitespace and lowercase
 df_all.columns = df_all.columns.str.strip().str.lower()
 
-REQUIRED_COLS = ['return-date', 'asin', 'product-name', 'quantity', 'reason', 'customer-comments']
+REQUIRED_COLS = ['asin', 'product-name', 'reason', 'customer-comments']
 missing = [c for c in REQUIRED_COLS if c not in df_all.columns]
 if missing:
     st.error(
@@ -35,7 +88,13 @@ if missing:
     )
     st.stop()
 
-df_all['return-date'] = pd.to_datetime(df_all['return-date'], errors='coerce', utc=True).dt.tz_localize(None)
+if 'return-date' not in df_all.columns:
+    df_all['return-date'] = pd.NaT
+else:
+    df_all['return-date'] = pd.to_datetime(df_all['return-date'], errors='coerce', utc=True).dt.tz_localize(None)
+
+if 'quantity' not in df_all.columns:
+    df_all['quantity'] = None
 
 all_asins = sorted(df_all['asin'].dropna().unique().tolist())
 
