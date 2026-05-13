@@ -23,7 +23,19 @@ except Exception as e:
     st.error(f"Не вдалося прочитати файл: {e}")
     st.stop()
 
-df_all['return-date'] = pd.to_datetime(df_all['return-date'], utc=True).dt.tz_localize(None)
+# Normalize column names: strip whitespace and lowercase
+df_all.columns = df_all.columns.str.strip().str.lower()
+
+REQUIRED_COLS = ['return-date', 'asin', 'product-name', 'quantity', 'reason', 'customer-comments']
+missing = [c for c in REQUIRED_COLS if c not in df_all.columns]
+if missing:
+    st.error(
+        f"У файлі відсутні обов'язкові колонки: **{missing}**\n\n"
+        f"Знайдені колонки: `{list(df_all.columns)}`"
+    )
+    st.stop()
+
+df_all['return-date'] = pd.to_datetime(df_all['return-date'], errors='coerce', utc=True).dt.tz_localize(None)
 
 all_asins = sorted(df_all['asin'].dropna().unique().tolist())
 
